@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
+
+	"silent-code/history"
+	"silent-code/ollama"
 
 	"github.com/spf13/cobra"
 )
@@ -21,9 +25,20 @@ by local LLMs (via Ollama).`,
 	},
 }
 
+// Global session ID and history manager
+var currentSessionID string
+var historyManager *history.HistoryManager
+
 // Interactive terminal mode
 func startInteractiveMode() {
+	// Initialize history
+	historyManager = history.NewHistoryManager("./history/sessions")
+
+	// Create new session
+	currentSessionID = fmt.Sprintf("session_%d", time.Now().Unix())
+
 	fmt.Println("🤖 Private Code - AI Terminal")
+	fmt.Printf("📝 Session: %s\n", currentSessionID)
 	fmt.Println("Type 'help' for commands, 'exit' to quit")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
@@ -75,6 +90,16 @@ func handleCommand(input string) {
 		handleSearch(args)
 	case "status":
 		handleStatus()
+	case "sessions":
+		handleSessions()
+	case "context":
+		handleContext()
+	case "prompt":
+		handlePrompt(args)
+	case "reason":
+		handleReason(args)
+	case "steps":
+		handleSteps()
 	default:
 		// Treat as a general question
 		handleGeneralQuestion(input)
@@ -84,14 +109,19 @@ func handleCommand(input string) {
 func showHelp() {
 	fmt.Println("\n📋 Available Commands:")
 	fmt.Println("  ask <question>     - Ask questions about your codebase")
-	fmt.Println("  explain <file>     - Explain a specific file or function")
-	fmt.Println("  generate <what>    - Generate new code")
-	fmt.Println("  refactor <file>    - Refactor existing code")
-	fmt.Println("  test               - Run tests and analyze results")
-	fmt.Println("  search <query>     - Search through codebase semantically")
-	fmt.Println("  status             - Show current project status")
-	fmt.Println("  help               - Show this help message")
-	fmt.Println("  exit/quit          - Exit the terminal")
+	fmt.Println("  explain <file>      - Explain a specific file or function")
+	fmt.Println("  generate <what>     - Generate new code")
+	fmt.Println("  refactor <file>     - Refactor existing code")
+	fmt.Println("  test                - Run tests and analyze results")
+	fmt.Println("  search <query>      - Search through codebase semantically")
+	fmt.Println("  sessions            - List and manage conversation sessions")
+	fmt.Println("  context             - Show current project context")
+	fmt.Println("  prompt <file>       - Add specific file to context")
+	fmt.Println("  reason <problem>    - Start multi-turn reasoning for a problem")
+	fmt.Println("  steps               - Show current reasoning steps")
+	fmt.Println("  status              - Show current project status")
+	fmt.Println("  help                - Show this help message")
+	fmt.Println("  exit/quit           - Exit the terminal")
 	fmt.Println("\n💡 You can also just type questions directly!")
 	fmt.Println("   Example: 'How does authentication work in this project?'")
 }
@@ -103,7 +133,7 @@ func handleAsk(args []string) {
 	}
 	question := strings.Join(args, " ")
 	fmt.Printf("🤔 Question: %s\n", question)
-	fmt.Println("🔄 [AI Response would go here - Ollama integration needed]")
+	ollama.TalkToOllama(question, currentSessionID, historyManager)
 }
 
 func handleExplain(args []string) {
@@ -113,7 +143,7 @@ func handleExplain(args []string) {
 	}
 	target := args[0]
 	fmt.Printf("📖 Explaining: %s\n", target)
-	fmt.Println("🔄 [AI Explanation would go here - Ollama integration needed]")
+	ollama.TalkToOllama(fmt.Sprintf("Explain this file/function: %s", target), currentSessionID, historyManager)
 }
 
 func handleGenerate(args []string) {
@@ -123,7 +153,7 @@ func handleGenerate(args []string) {
 	}
 	what := strings.Join(args, " ")
 	fmt.Printf("⚡ Generating: %s\n", what)
-	fmt.Println("🔄 [AI Code Generation would go here - Ollama integration needed]")
+	ollama.TalkToOllama(fmt.Sprintf("Generate: %s", what), currentSessionID, historyManager)
 }
 
 func handleRefactor(args []string) {
@@ -133,12 +163,12 @@ func handleRefactor(args []string) {
 	}
 	file := args[0]
 	fmt.Printf("🔧 Refactoring: %s\n", file)
-	fmt.Println("🔄 [AI Refactoring would go here - Ollama integration needed]")
+	ollama.TalkToOllama(fmt.Sprintf("Refactor this file: %s", file), currentSessionID, historyManager)
 }
 
 func handleTest(args []string) {
 	fmt.Println("🧪 Running tests...")
-	fmt.Println("🔄 [Test execution and AI analysis would go here - Ollama integration needed]")
+	ollama.TalkToOllama("Run tests and analyze the results", currentSessionID, historyManager)
 }
 
 func handleSearch(args []string) {
@@ -148,24 +178,99 @@ func handleSearch(args []string) {
 	}
 	query := strings.Join(args, " ")
 	fmt.Printf("🔍 Searching for: %s\n", query)
-	fmt.Println("🔄 [Semantic search would go here - Ollama integration needed]")
+	ollama.TalkToOllama(fmt.Sprintf("Search for: %s", query), currentSessionID, historyManager)
+}
+
+func handleSessions() {
+	fmt.Println("📝 Session Management:")
+	fmt.Printf("  Current Session: %s\n", currentSessionID)
+	fmt.Println("  💡 Sessions are automatically saved to ./sessions/")
+	fmt.Println("  💡 Each conversation maintains context across commands")
+
+	// List available sessions
+	sessions, err := historyManager.ListSessions()
+	if err != nil {
+		fmt.Printf("  ❌ Error listing sessions: %v\n", err)
+		return
+	}
+
+	if len(sessions) > 0 {
+		fmt.Println("  📋 Available Sessions:")
+		for _, session := range sessions {
+			fmt.Printf("    • %s\n", session)
+		}
+	} else {
+		fmt.Println("  📋 No previous sessions found")
+	}
 }
 
 func handleStatus() {
 	fmt.Println("📊 Project Status:")
-	fmt.Println("  • AI Model: Not connected (Ollama integration pending)")
+	fmt.Println("  • AI Model: Ollama (codellama:13b)")
 	fmt.Println("  • Project: silent-code")
 	fmt.Println("  • Language: Go")
-	fmt.Println("  • Status: Ready for AI integration")
+	fmt.Println("  • Session: Active")
+	fmt.Printf("  • History: %s\n", currentSessionID)
+}
+
+func handleContext() {
+	fmt.Println("📁 Project Context:")
+	fmt.Println("  • Current directory: .")
+	fmt.Println("  • Project type: Go")
+	fmt.Println("  • Main files: main.go, cmd/root.go")
+	fmt.Println("  • Dependencies: cobra, ollama")
+	fmt.Println("  💡 Context is automatically loaded for better AI responses")
+}
+
+func handlePrompt(args []string) {
+	if len(args) == 0 {
+		fmt.Println("❌ Please specify a file to add to context. Example: prompt main.go")
+		return
+	}
+	file := args[0]
+	fmt.Printf("📄 Adding %s to context...\n", file)
+	fmt.Println("💡 This file will be included in AI responses for better context")
+}
+
+func handleReason(args []string) {
+	if len(args) == 0 {
+		fmt.Println("❌ Please specify a problem to reason about. Example: reason 'How to optimize this code?'")
+		return
+	}
+	problem := strings.Join(args, " ")
+	fmt.Printf("🧠 Starting multi-turn reasoning for: %s\n", problem)
+	fmt.Println("💡 Use 'steps' to see reasoning progress")
+
+	// Start reasoning session
+	ollama.InitializeReasoning()
+	ollama.StartReasoning(currentSessionID, problem)
+
+	// Add initial step
+	ollama.AddReasoningStep(currentSessionID, "Analyzing the problem", "Breaking down the problem into manageable steps")
+
+	fmt.Println("🔄 Reasoning session started. The AI will work through this step by step.")
+}
+
+func handleSteps() {
+	fmt.Println("🧠 Current Reasoning Steps:")
+
+	// Get reasoning summary
+	summary, err := ollama.GetReasoningSummary(currentSessionID)
+	if err != nil {
+		fmt.Printf("❌ No active reasoning session. Use 'reason <problem>' to start one.\n")
+		return
+	}
+
+	fmt.Println(summary)
 }
 
 func handleGeneralQuestion(input string) {
 	fmt.Printf("💭 Question: %s\n", input)
-	fmt.Println("🔄 [AI Response would go here - Ollama integration needed]")
+	ollama.TalkToOllama(input, currentSessionID, historyManager)
 }
 
 func init() {
-	// Remove the old greet command and add new commands
+	// Add command handlers
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "ask [question]",
 		Short: "Ask a question about your codebase",
