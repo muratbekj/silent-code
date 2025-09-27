@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"silent-code/history"
+	"silent-code/mcp"
 	"silent-code/ollama"
 
 	"github.com/spf13/cobra"
@@ -100,6 +101,12 @@ func handleCommand(input string) {
 		handleReason(args)
 	case "steps":
 		handleSteps()
+	case ":read":
+		handleMCPRead(args)
+	case ":edit":
+		handleMCPEdit(args)
+	case ":new":
+		handleMCPCreate(args)
 	default:
 		// Treat as a general question
 		handleGeneralQuestion(input)
@@ -120,6 +127,9 @@ func showHelp() {
 	fmt.Println("  reason <problem>    - Start multi-turn reasoning for a problem")
 	fmt.Println("  steps               - Show current reasoning steps")
 	fmt.Println("  status              - Show current project status")
+	fmt.Println("  :read <file>        - View file contents")
+	fmt.Println("  :edit <file>        - Edit file with AI assistance")
+	fmt.Println("  :new <file>         - Create new file with AI assistance")
 	fmt.Println("  help                - Show this help message")
 	fmt.Println("  exit/quit           - Exit the terminal")
 	fmt.Println("\n💡 You can also just type questions directly!")
@@ -143,7 +153,23 @@ func handleExplain(args []string) {
 	}
 	target := args[0]
 	fmt.Printf("📖 Explaining: %s\n", target)
-	ollama.TalkToOllama(fmt.Sprintf("Explain this file/function: %s", target), currentSessionID, historyManager)
+
+	client := mcp.NewMCPClient("http://127.0.0.1:8080")
+	result, err := client.ExplainCode(target)
+	if err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
+		return
+	}
+
+	if !result.Success {
+		fmt.Printf("❌ Explanation failed: %s\n", result.Error)
+		return
+	}
+
+	fmt.Printf("\n🤖 Code Explanation:\n")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println(result.Content)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 }
 
 func handleGenerate(args []string) {
@@ -309,6 +335,88 @@ func init() {
 			handleGenerate(args)
 		},
 	})
+}
+
+// MCP Handler functions
+func handleMCPCreate(args []string) {
+	if len(args) < 2 {
+		fmt.Println("❌ Usage: mcp-create <file> <requirements>")
+		return
+	}
+
+	filePath := args[0]
+	requirements := strings.Join(args[1:], " ")
+
+	fmt.Printf("📝 MCP Creating: %s\n", filePath)
+	fmt.Printf("💭 Requirements: %s\n", requirements)
+
+	client := mcp.NewMCPClient("http://127.0.0.1:8080")
+	result, err := client.CreateFile(filePath, requirements)
+	if err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
+		return
+	}
+
+	if !result.Success {
+		fmt.Printf("❌ Creation failed: %s\n", result.Error)
+		return
+	}
+
+	fmt.Printf("✅ %s\n", result.Message)
+}
+
+func handleMCPEdit(args []string) {
+	if len(args) < 2 {
+		fmt.Println("❌ Usage: mcp-edit <file> <edit_request>")
+		return
+	}
+
+	filePath := args[0]
+	editRequest := strings.Join(args[1:], " ")
+
+	fmt.Printf("✏️  MCP Editing: %s\n", filePath)
+	fmt.Printf("💭 Request: %s\n", editRequest)
+
+	client := mcp.NewMCPClient("http://127.0.0.1:8080")
+	result, err := client.EditFile(filePath, editRequest)
+	if err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
+		return
+	}
+
+	if !result.Success {
+		fmt.Printf("❌ Edit failed: %s\n", result.Error)
+		return
+	}
+
+	fmt.Printf("✅ %s\n", result.Message)
+}
+
+func handleMCPRead(args []string) {
+	if len(args) == 0 {
+		fmt.Println("❌ Please specify a file. Example: mcp-read main.go")
+		return
+	}
+
+	filePath := args[0]
+	fmt.Printf("📄 MCP Reading: %s\n", filePath)
+
+	client := mcp.NewMCPClient("http://127.0.0.1:8080")
+	result, err := client.ReadFile(filePath)
+	if err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
+		return
+	}
+
+	if !result.Success {
+		fmt.Printf("❌ Read failed: %s\n", result.Error)
+		return
+	}
+
+	fmt.Printf("\n📄 Contents of %s:\n", filePath)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println(result.Content)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 }
 
 func RootCmd() {

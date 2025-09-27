@@ -131,6 +131,87 @@ func TalkToOllama(userInput string, sessionID string, historyManager *history.Hi
 	fmt.Printf("\n⏱️  Completed in %v\n", time.Since(start))
 }
 
+// TalkToOllamaWithResponse returns the AI response as a string
+func TalkToOllamaWithResponse(userInput string, sessionID string, historyManager *history.HistoryManager) (string, error) {
+	start := time.Now()
+
+	// Initialize prompt builder
+	promptBuilder := agent.NewPromptBuilder()
+
+	// Load project context
+	promptBuilder.LoadProjectContext(".")
+
+	// Add user message to history
+	userMessage := agent.Message{
+		Role:    "user",
+		Content: userInput,
+	}
+
+	if historyManager != nil {
+		historyManager.AddMessage(sessionID, userMessage)
+	}
+
+	// Get conversation history for context
+	var conversationHistory []string
+	if historyManager != nil {
+		history, err := historyManager.GetSessionHistory(sessionID)
+		if err == nil {
+			// Convert history to conversation format
+			for _, msg := range history {
+				conversationHistory = append(conversationHistory, fmt.Sprintf("%s: %s", msg.Role, msg.Content))
+			}
+		}
+	}
+
+	// Build enhanced prompt with context
+	enhancedPrompt := promptBuilder.BuildPrompt(userInput, conversationHistory)
+
+	// Create messages with system prompt
+	messages := []agent.Message{
+		{
+			Role:    "system",
+			Content: promptBuilder.SystemPrompt,
+		},
+		{
+			Role:    "user",
+			Content: enhancedPrompt,
+		},
+	}
+
+	req := Request{
+		Model:    "codellama:13b",
+		Stream:   true, // Enable streaming
+		Messages: messages,
+	}
+
+	// Show typing indicator
+	fmt.Print("🤖 AI: ")
+	showTypingIndicator()
+
+	// Store AI response
+	var aiResponse string
+
+	err := talkToOllamaStream(defaultOllamaURL, req, func(content string) {
+		aiResponse += content
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("error talking to Ollama: %w", err)
+	}
+
+	// Add AI response to history
+	if historyManager != nil && aiResponse != "" {
+		aiMessage := agent.Message{
+			Role:    "assistant",
+			Content: aiResponse,
+		}
+		historyManager.AddMessage(sessionID, aiMessage)
+	}
+
+	fmt.Printf("\n⏱️  Completed in %v\n", time.Since(start))
+	return aiResponse, nil
+}
+
 // showTypingIndicator displays an "AI is thinking" animation
 func showTypingIndicator() {
 	// Start thinking indicator in background
@@ -140,7 +221,7 @@ func showTypingIndicator() {
 		// Show "AI is thinking" with animated dots
 		thinkingPhrases := []string{"I am thinking", "I am thinking.", "I am thinking..", "I am thinking..."}
 
-		for i := 0; i < 20; i++ { // Run for about 2 seconds max
+		for i := 0; i < 200; i++ { // Run for about 2 seconds max
 			phrase := thinkingPhrases[i%len(thinkingPhrases)]
 			fmt.Print("\r🤖 AI: " + phrase + "   ")
 			time.Sleep(100 * time.Millisecond)
