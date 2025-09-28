@@ -19,6 +19,9 @@ type ToolResult struct {
 	Content string `json:"content,omitempty"`
 	Message string `json:"message,omitempty"`
 	Error   string `json:"error,omitempty"`
+	Output  string `json:"output,omitempty"`
+	Stderr  string `json:"stderr,omitempty"`
+	Command string `json:"command,omitempty"`
 }
 
 func NewMCPClient(baseURL string) *MCPClient {
@@ -83,6 +86,15 @@ func (c *MCPClient) CallTool(toolName string, params map[string]interface{}) (*T
 	if errorMsg, ok := result["error"].(string); ok {
 		toolResult.Error = errorMsg
 	}
+	if output, ok := result["output"].(string); ok {
+		toolResult.Output = output
+	}
+	if stderr, ok := result["stderr"].(string); ok {
+		toolResult.Stderr = stderr
+	}
+	if command, ok := result["command"].(string); ok {
+		toolResult.Command = command
+	}
 
 	return toolResult, nil
 }
@@ -118,5 +130,11 @@ func (c *MCPClient) AnalyzeCode(filePath, question string) (*ToolResult, error) 
 func (c *MCPClient) ExplainCode(filePath string) (*ToolResult, error) {
 	return c.CallTool("explain_code", map[string]interface{}{
 		"file_path": filePath,
+	})
+}
+
+func (c *MCPClient) ExecuteShell(command string) (*ToolResult, error) {
+	return c.CallTool("execute_shell", map[string]interface{}{
+		"command": command,
 	})
 }

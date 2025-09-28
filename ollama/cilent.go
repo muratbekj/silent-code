@@ -47,9 +47,36 @@ const ollamaListURL = "http://localhost:11434/api/tags"
 // Global reasoning manager
 var reasoningManager *agent.ReasoningManager
 
+// Global model configuration
+var currentModel = "codellama:13b"
+
 // InitializeReasoning sets up the reasoning manager
 func InitializeReasoning() {
 	reasoningManager = agent.NewReasoningManager()
+}
+
+// SetModel sets the current model for all Ollama requests
+func SetModel(modelName string) error {
+	// Validate that the model exists
+	models, err := ListOllamaModels()
+	if err != nil {
+		return fmt.Errorf("failed to list models: %w", err)
+	}
+
+	// Check if the model exists
+	for _, model := range models {
+		if model.Name == modelName {
+			currentModel = modelName
+			return nil
+		}
+	}
+
+	return fmt.Errorf("model '%s' not found. Use '/config' to see available models", modelName)
+}
+
+// GetCurrentModel returns the currently configured model
+func GetCurrentModel() string {
+	return currentModel
 }
 
 func TalkToOllama(userInput string, sessionID string, historyManager *history.HistoryManager) {
@@ -99,21 +126,21 @@ func TalkToOllama(userInput string, sessionID string, historyManager *history.Hi
 	}
 
 	req := Request{
-		Model:    "codellama:13b",
+		Model:    currentModel,
 		Stream:   true, // Enable streaming
 		Messages: messages,
 	}
 
 	// Show typing indicator
 	fmt.Print("🤖 AI: ")
-	showTypingIndicator()
+	stopTyping := showTypingIndicator()
 
 	// Store AI response
 	var aiResponse string
 
 	err := talkToOllamaStream(defaultOllamaURL, req, func(content string) {
 		aiResponse += content
-	})
+	}, stopTyping)
 
 	if err != nil {
 		fmt.Printf("❌ Error talking to Ollama: %v\n", err)
@@ -180,21 +207,21 @@ func TalkToOllamaWithResponse(userInput string, sessionID string, historyManager
 	}
 
 	req := Request{
-		Model:    "codellama:13b",
+		Model:    currentModel,
 		Stream:   true, // Enable streaming
 		Messages: messages,
 	}
 
 	// Show typing indicator
 	fmt.Print("🤖 AI: ")
-	showTypingIndicator()
+	stopTyping := showTypingIndicator()
 
 	// Store AI response
 	var aiResponse string
 
 	err := talkToOllamaStream(defaultOllamaURL, req, func(content string) {
 		aiResponse += content
-	})
+	}, stopTyping)
 
 	if err != nil {
 		return "", fmt.Errorf("error talking to Ollama: %w", err)
@@ -214,7 +241,9 @@ func TalkToOllamaWithResponse(userInput string, sessionID string, historyManager
 }
 
 // showTypingIndicator displays an "AI is thinking" animation
-func showTypingIndicator() {
+func showTypingIndicator() chan bool {
+	stopChan := make(chan bool, 1)
+
 	// Start thinking indicator in background
 	go func() {
 		time.Sleep(200 * time.Millisecond) // Small delay before showing thinking
@@ -222,16 +251,23 @@ func showTypingIndicator() {
 		// Show "AI is thinking" with animated dots
 		thinkingPhrases := []string{"I am thinking", "I am thinking.", "I am thinking..", "I am thinking..."}
 
-		for i := 0; i < 500; i++ { // Run for about 5 seconds max
-			phrase := thinkingPhrases[i%len(thinkingPhrases)]
-			fmt.Print("\r🤖: " + phrase + "   ")
-			time.Sleep(100 * time.Millisecond)
+		for i := 0; i < 50; i++ { // Run for about 5 seconds max
+			select {
+			case <-stopChan:
+				return // Stop if signaled
+			default:
+				phrase := thinkingPhrases[i%len(thinkingPhrases)]
+				fmt.Print("\r🤖: " + phrase + "   ")
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
 	}()
+
+	return stopChan
 }
 
 // talkToOllamaStream handles streaming responses with enhanced typing effect
-func talkToOllamaStream(url string, ollamaReq Request, onContent func(string)) error {
+func talkToOllamaStream(url string, ollamaReq Request, onContent func(string), stopTyping chan bool) error {
 	js, err := json.Marshal(&ollamaReq)
 	if err != nil {
 		return err
@@ -269,6 +305,11 @@ func talkToOllamaStream(url string, ollamaReq Request, onContent func(string)) e
 		if streamResp.Message.Content != "" {
 			// Clear thinking indicator on first token
 			if firstToken {
+				// Stop the thinking indicator
+				select {
+				case stopTyping <- true:
+				default:
+				}
 				fmt.Print("\r🤖 AI: ") // Clear thinking indicator and reset to AI prompt
 				firstToken = false
 			}
@@ -343,7 +384,7 @@ func TalkToOllamaWithTyping(userInput string) {
 	}
 
 	req := Request{
-		Model:    "codellama:13b",
+		Model:    currentModel,
 		Stream:   true,
 		Messages: []agent.Message{msg},
 	}

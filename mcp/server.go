@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -101,7 +102,7 @@ func (o *OllamaClient) Generate(prompt string) (string, error) {
 
 func StartServer() {
 	// Initialize Ollama client
-	ollamaClient := NewOllamaClient("http://localhost:11434", "qwen2.5-coder:7b")
+	ollamaClient := NewOllamaClient("http://localhost:11434", "codellama:13b")
 
 	// HTTP server for MCP-like functionality
 	http.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +136,7 @@ func StartServer() {
 
 	fmt.Println("🚀 Starting Silent Code MCP Server on port 8080...")
 	fmt.Println("💡 Make sure Ollama is running on localhost:11434")
-	fmt.Println("🔧 Available tools: create_file, edit_file, read_file, analyze_code")
+	fmt.Println("🔧 Available tools: create_file, edit_file, read_file, analyze_code, execute_shell")
 	fmt.Println("📡 Server will start on http://localhost:8080")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
@@ -211,6 +212,8 @@ func handleToolCall(req MCPRequest, ollamaClient *OllamaClient) MCPResponse {
 		result, err = handleAnalyzeCode(arguments, ollamaClient)
 	case "explain_code":
 		result, err = handleExplainCode(arguments, ollamaClient)
+	case "execute_shell":
+		result, err = handleExecuteShell(arguments)
 	default:
 		return MCPResponse{
 			JSONRPC: "2.0",
@@ -499,4 +502,66 @@ func cleanAIResponse(response string) string {
 	}
 
 	return strings.TrimSpace(response)
+}
+
+func handleExecuteShell(params map[string]interface{}) (interface{}, error) {
+	command, ok := params["command"].(string)
+	if !ok {
+		return nil, fmt.Errorf("command parameter is required")
+	}
+
+	// Parse command and arguments
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "Empty command provided",
+		}, nil
+	}
+
+	// Create command with context timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
+
+	// Set working directory to current directory
+	cmd.Dir = "."
+
+	// Capture both stdout and stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	// Execute the command
+	err := cmd.Run()
+
+	// Get output
+	output := stdout.String()
+	errorOutput := stderr.String()
+
+	// Check for timeout
+	if ctx.Err() == context.DeadlineExceeded {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "Command timed out after 30 seconds",
+			"output":  output,
+			"stderr":  errorOutput,
+		}, nil
+	}
+
+	// Determine success based on exit code
+	success := err == nil
+	message := "Command executed successfully"
+	if !success {
+		message = fmt.Sprintf("Command failed with error: %v", err)
+	}
+
+	return map[string]interface{}{
+		"success": success,
+		"output":  output,
+		"stderr":  errorOutput,
+		"message": message,
+		"command": command,
+	}, nil
 }

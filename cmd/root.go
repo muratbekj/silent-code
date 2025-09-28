@@ -73,6 +73,28 @@ func startInteractiveMode() {
 	}
 }
 
+// List of common shell commands that should be executed directly
+var shellCommands = map[string]bool{
+	"ls": true, "cd": true, "pwd": true, "mkdir": true, "rmdir": true, "rm": true,
+	"touch": true, "cp": true, "mv": true, "cat": true, "less": true, "more": true,
+	"head": true, "tail": true, "grep": true, "find": true, "which": true, "whereis": true,
+	"ps": true, "top": true, "kill": true, "killall": true, "jobs": true, "bg": true, "fg": true,
+	"git": true, "docker": true, "kubectl": true, "npm": true, "yarn": true, "pip": true,
+	"go": true, "python": true, "node": true, "java": true, "gcc": true, "make": true,
+	"curl": true, "wget": true, "ssh": true, "scp": true, "rsync": true,
+	"chmod": true, "chown": true, "sudo": true, "su": true, "passwd": true,
+	"df": true, "du": true, "free": true, "uptime": true, "who": true, "whoami": true,
+	"uname": true, "date": true, "cal": true, "echo": true, "printf": true,
+	"sort": true, "uniq": true, "wc": true, "cut": true, "awk": true, "sed": true,
+	"tar": true, "zip": true, "unzip": true, "gzip": true, "gunzip": true,
+	"vim": true, "nano": true, "emacs": true, "code": true, "subl": true,
+	"man": true, "info": true, "help": true, "history": true, "alias": true,
+}
+
+func isShellCommand(command string) bool {
+	return shellCommands[command]
+}
+
 func handleCommand(input string) {
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
@@ -81,6 +103,12 @@ func handleCommand(input string) {
 
 	command := parts[0]
 	args := parts[1:]
+
+	// Check if it's a shell command first
+	if isShellCommand(command) {
+		handleShellCommand(input)
+		return
+	}
 
 	switch command {
 	case "help", "/help":
@@ -94,7 +122,7 @@ func handleCommand(input string) {
 	case "search", "/search":
 		handleSearch(args)
 	case "config", "/config":
-		handleConfig()
+		handleConfig(args)
 	case "status", "/status":
 		handleStatus()
 	case "sessions", "/sessions":
@@ -224,9 +252,23 @@ func handleSessions() {
 	}
 }
 
-func handleConfig() {
+func handleConfig(args []string) {
 	fmt.Println("🔧 Ollama Configuration:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// Show current model
+	fmt.Printf("🤖 Current Model: %s\n\n", ollama.GetCurrentModel())
+
+	// Handle model switching if requested
+	if len(args) >= 2 && args[0] == "models" {
+		modelName := args[1]
+		err := ollama.SetModel(modelName)
+		if err != nil {
+			fmt.Printf("❌ Error switching model: %v\n", err)
+			return
+		}
+		fmt.Printf("✅ Model switched to: %s\n\n", modelName)
+	}
 
 	models, err := ollama.ListOllamaModels()
 	if err != nil {
@@ -243,7 +285,13 @@ func handleConfig() {
 
 	fmt.Printf("📋 Installed Models (%d):\n", len(models))
 	for i, model := range models {
-		fmt.Printf("  %d. %s\n", i+1, model.Name)
+		// Mark current model with an arrow
+		currentIndicator := ""
+		if model.Name == ollama.GetCurrentModel() {
+			currentIndicator = " ← Current"
+		}
+
+		fmt.Printf("  %d. %s%s\n", i+1, model.Name, currentIndicator)
 		fmt.Printf("     Size: %.2f GB\n", float64(model.Size)/1024/1024/1024)
 		fmt.Printf("     Modified: %s\n", model.ModifiedAt.Format("2006-01-02 15:04:05"))
 		if model.Details.Family != "" {
@@ -254,11 +302,13 @@ func handleConfig() {
 		}
 		fmt.Println()
 	}
+
+	fmt.Println("💡 Usage: /config models <modelname> to switch models")
 }
 
 func handleStatus() {
 	fmt.Println("📊 Project Status:")
-	fmt.Println("  • AI Model: Ollama (codellama:13b)")
+	fmt.Printf("  • AI Model: Ollama (%s)\n", ollama.GetCurrentModel())
 	fmt.Println("  • Project: silent-code")
 	fmt.Println("  • Language: Go")
 	fmt.Println("  • Session: Active")
@@ -422,6 +472,33 @@ func handleMCPRead(args []string) {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println(result.Content)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+}
+
+func handleShellCommand(command string) {
+	fmt.Printf("🔧 Executing: %s\n", command)
+
+	client := mcp.NewMCPClient("http://127.0.0.1:8080")
+	result, err := client.ExecuteShell(command)
+	if err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
+		return
+	}
+
+	if !result.Success {
+		fmt.Printf("❌ Command failed: %s\n", result.Error)
+		if result.Stderr != "" {
+			fmt.Printf("Error output: %s\n", result.Stderr)
+		}
+		return
+	}
+
+	// For successful commands, just show the output without extra formatting
+	if result.Output != "" {
+		fmt.Print(result.Output)
+	}
+	if result.Stderr != "" {
+		fmt.Print(result.Stderr)
+	}
 }
 
 func RootCmd() {
