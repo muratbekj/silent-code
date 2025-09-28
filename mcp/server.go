@@ -53,13 +53,13 @@ func NewOllamaClient(baseURL, model string) *OllamaClient {
 	return &OllamaClient{
 		BaseURL: baseURL,
 		Model:   model,
-		Client:  &http.Client{Timeout: 30 * time.Second},
+		Client:  &http.Client{Timeout: 300 * time.Second}, // Increased to 5 minutes
 	}
 }
 
 func (o *OllamaClient) Generate(prompt string) (string, error) {
 	// Add timeout context
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second) // Increased to 5 minutes
 	defer cancel()
 
 	reqBody := OllamaRequest{

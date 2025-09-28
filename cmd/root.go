@@ -16,8 +16,15 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "silent-code",
-	Short: "A coding agent that lives in your terminal",
-	Long: `Private Code - A Warp-like AI terminal that runs fully offline on your machine.
+	Short: "AI-powered development assistant with privacy-first architecture",
+	Long: `Silent Code - An AI-powered development assistant that runs fully offline on your machine.
+
+Core Features:
+• Code Understanding & Editing - Query and edit large codebases beyond traditional context window limits
+• Workflow Automation - Automate operational tasks like handling pull requests and complex rebases  
+• Local Model Support - Works with any Ollama-compatible model (Qwen, Llama, CodeLlama, etc.)
+• Privacy-First Architecture - All processing happens on your infrastructure
+
 It looks and feels like a terminal, but acts as an AI coding agent: you can ask it about 
 your project, edit files, create new ones, run tests, and reason about code — all powered 
 by local LLMs (via Ollama).`,
@@ -38,15 +45,16 @@ func startInteractiveMode() {
 	// Create new session
 	currentSessionID = fmt.Sprintf("session_%d", time.Now().Unix())
 
-	fmt.Println("🤖 Private Code - AI Terminal")
+	fmt.Println("🤖 Silent Code - AI-Powered Development Assistant")
 	fmt.Printf("📝 Session: %s\n", currentSessionID)
-	fmt.Println("Type 'help' for commands, 'exit' to quit")
+	fmt.Println("Type '/help' for commands, '/exit' to quit")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	showHelp()
 
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for {
-		fmt.Print("private-code> ")
+		fmt.Print("silent-code> ")
 		if !scanner.Scan() {
 			break
 		}
@@ -75,38 +83,39 @@ func handleCommand(input string) {
 	args := parts[1:]
 
 	switch command {
-	case "help":
+	case "help", "/help":
 		showHelp()
-	case "ask":
-		handleAsk(args)
-	case "explain":
+	case "explain", "/explain":
 		handleExplain(args)
-	case "generate":
+	case "generate", "/generate":
 		handleGenerate(args)
-	case "refactor":
-		handleRefactor(args)
-	case "test":
+	case "test", "/test":
 		handleTest(args)
-	case "search":
+	case "search", "/search":
 		handleSearch(args)
-	case "status":
+	case "config", "/config":
+		handleConfig()
+	case "status", "/status":
 		handleStatus()
-	case "sessions":
+	case "sessions", "/sessions":
 		handleSessions()
-	case "context":
+	case "context", "/context":
 		handleContext()
-	case "prompt":
+	case "prompt", "/prompt":
 		handlePrompt(args)
-	case "reason":
+	case "reason", "/reason":
 		handleReason(args)
-	case "steps":
+	case "steps", "/steps":
 		handleSteps()
-	case ":read":
+	case "read", "/read":
 		handleMCPRead(args)
-	case ":edit":
+	case "edit", "/edit":
 		handleMCPEdit(args)
-	case ":new":
+	case "new", "/new":
 		handleMCPCreate(args)
+	case "exit", "quit", "/exit", "/quit":
+		fmt.Println("👋 Goodbye!")
+		os.Exit(0)
 	default:
 		// Treat as a general question
 		handleGeneralQuestion(input)
@@ -114,36 +123,33 @@ func handleCommand(input string) {
 }
 
 func showHelp() {
+	fmt.Println("\n🤖 Silent Code - AI-Powered Development Assistant")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("\n🔧 Core Features:")
+	fmt.Println("  • Code Understanding & Editing - Query and edit large codebases")
+	fmt.Println("  • Workflow Automation - Handle pull requests and complex rebases")
+	fmt.Println("  • Local Model Support - Works with any Ollama-compatible model")
+	fmt.Println("  • Privacy-First Architecture - All processing on your infrastructure")
 	fmt.Println("\n📋 Available Commands:")
-	fmt.Println("  ask <question>     - Ask questions about your codebase")
-	fmt.Println("  explain <file>      - Explain a specific file or function")
-	fmt.Println("  generate <what>     - Generate new code")
-	fmt.Println("  refactor <file>     - Refactor existing code")
-	fmt.Println("  test                - Run tests and analyze results")
-	fmt.Println("  search <query>      - Search through codebase semantically")
-	fmt.Println("  sessions            - List and manage conversation sessions")
-	fmt.Println("  context             - Show current project context")
-	fmt.Println("  prompt <file>       - Add specific file to context")
-	fmt.Println("  reason <problem>    - Start multi-turn reasoning for a problem")
-	fmt.Println("  steps               - Show current reasoning steps")
-	fmt.Println("  status              - Show current project status")
-	fmt.Println("  :read <file>        - View file contents")
-	fmt.Println("  :edit <file>        - Edit file with AI assistance")
-	fmt.Println("  :new <file>         - Create new file with AI assistance")
-	fmt.Println("  help                - Show this help message")
-	fmt.Println("  exit/quit           - Exit the terminal")
+	fmt.Println("  /explain <file>     - Explain a specific file or function")
+	fmt.Println("  /generate <what>    - Generate new code")
+	fmt.Println("  /refactor <file>    - Refactor existing code")
+	fmt.Println("  /test               - Run tests and analyze results")
+	fmt.Println("  /search <query>     - Search through codebase semantically")
+	fmt.Println("  /config             - Show locally installed Ollama models")
+	fmt.Println("  /sessions           - List and manage conversation sessions")
+	fmt.Println("  /context            - Show current project context")
+	fmt.Println("  /prompt <file>      - Add specific file to context")
+	fmt.Println("  /reason <problem>   - Start multi-turn reasoning for a problem")
+	fmt.Println("  /steps              - Show current reasoning steps")
+	fmt.Println("  /status             - Show current project status")
+	fmt.Println("  /read <file>        - View file contents")
+	fmt.Println("  /edit <file>        - Edit file with AI assistance")
+	fmt.Println("  /new <file>         - Create new file with AI assistance")
+	fmt.Println("  /help               - Show this help message")
+	fmt.Println("  /exit or /quit      - Exit the terminal")
 	fmt.Println("\n💡 You can also just type questions directly!")
 	fmt.Println("   Example: 'How does authentication work in this project?'")
-}
-
-func handleAsk(args []string) {
-	if len(args) == 0 {
-		fmt.Println("❌ Please provide a question. Example: ask 'How does the authentication work?'")
-		return
-	}
-	question := strings.Join(args, " ")
-	fmt.Printf("🤔 Question: %s\n", question)
-	ollama.TalkToOllama(question, currentSessionID, historyManager)
 }
 
 func handleExplain(args []string) {
@@ -152,8 +158,6 @@ func handleExplain(args []string) {
 		return
 	}
 	target := args[0]
-	fmt.Printf("📖 Explaining: %s\n", target)
-
 	client := mcp.NewMCPClient("http://127.0.0.1:8080")
 	result, err := client.ExplainCode(target)
 	if err != nil {
@@ -180,16 +184,6 @@ func handleGenerate(args []string) {
 	what := strings.Join(args, " ")
 	fmt.Printf("⚡ Generating: %s\n", what)
 	ollama.TalkToOllama(fmt.Sprintf("Generate: %s", what), currentSessionID, historyManager)
-}
-
-func handleRefactor(args []string) {
-	if len(args) == 0 {
-		fmt.Println("❌ Please specify a file to refactor. Example: refactor main.go")
-		return
-	}
-	file := args[0]
-	fmt.Printf("🔧 Refactoring: %s\n", file)
-	ollama.TalkToOllama(fmt.Sprintf("Refactor this file: %s", file), currentSessionID, historyManager)
 }
 
 func handleTest(args []string) {
@@ -227,6 +221,38 @@ func handleSessions() {
 		}
 	} else {
 		fmt.Println("  📋 No previous sessions found")
+	}
+}
+
+func handleConfig() {
+	fmt.Println("🔧 Ollama Configuration:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	models, err := ollama.ListOllamaModels()
+	if err != nil {
+		fmt.Printf("❌ Error connecting to Ollama: %v\n", err)
+		fmt.Println("💡 Make sure Ollama is running: ollama serve")
+		return
+	}
+
+	if len(models) == 0 {
+		fmt.Println("📋 No models installed")
+		fmt.Println("💡 Install a model: ollama pull codellama:13b")
+		return
+	}
+
+	fmt.Printf("📋 Installed Models (%d):\n", len(models))
+	for i, model := range models {
+		fmt.Printf("  %d. %s\n", i+1, model.Name)
+		fmt.Printf("     Size: %.2f GB\n", float64(model.Size)/1024/1024/1024)
+		fmt.Printf("     Modified: %s\n", model.ModifiedAt.Format("2006-01-02 15:04:05"))
+		if model.Details.Family != "" {
+			fmt.Printf("     Family: %s\n", model.Details.Family)
+		}
+		if model.Details.ParameterSize != "" {
+			fmt.Printf("     Parameters: %s\n", model.Details.ParameterSize)
+		}
+		fmt.Println()
 	}
 }
 
@@ -291,24 +317,11 @@ func handleSteps() {
 }
 
 func handleGeneralQuestion(input string) {
-	fmt.Printf("💭 Question: %s\n", input)
 	ollama.TalkToOllama(input, currentSessionID, historyManager)
 }
 
 func init() {
 	// Add command handlers
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "ask [question]",
-		Short: "Ask a question about your codebase",
-		Long:  "Ask questions about your project, code structure, or implementation details",
-		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) == 0 {
-				fmt.Println("❌ Please provide a question")
-				return
-			}
-			handleAsk(args)
-		},
-	})
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "explain [file]",
@@ -347,9 +360,6 @@ func handleMCPCreate(args []string) {
 	filePath := args[0]
 	requirements := strings.Join(args[1:], " ")
 
-	fmt.Printf("📝 MCP Creating: %s\n", filePath)
-	fmt.Printf("💭 Requirements: %s\n", requirements)
-
 	client := mcp.NewMCPClient("http://127.0.0.1:8080")
 	result, err := client.CreateFile(filePath, requirements)
 	if err != nil {
@@ -374,9 +384,6 @@ func handleMCPEdit(args []string) {
 	filePath := args[0]
 	editRequest := strings.Join(args[1:], " ")
 
-	fmt.Printf("✏️  MCP Editing: %s\n", filePath)
-	fmt.Printf("💭 Request: %s\n", editRequest)
-
 	client := mcp.NewMCPClient("http://127.0.0.1:8080")
 	result, err := client.EditFile(filePath, editRequest)
 	if err != nil {
@@ -399,8 +406,6 @@ func handleMCPRead(args []string) {
 	}
 
 	filePath := args[0]
-	fmt.Printf("📄 MCP Reading: %s\n", filePath)
-
 	client := mcp.NewMCPClient("http://127.0.0.1:8080")
 	result, err := client.ReadFile(filePath)
 	if err != nil {

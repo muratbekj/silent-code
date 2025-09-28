@@ -42,6 +42,7 @@ type agentStreamResponse struct {
 }
 
 const defaultOllamaURL = "http://localhost:11434/api/chat"
+const ollamaListURL = "http://localhost:11434/api/tags"
 
 // Global reasoning manager
 var reasoningManager *agent.ReasoningManager
@@ -221,9 +222,9 @@ func showTypingIndicator() {
 		// Show "AI is thinking" with animated dots
 		thinkingPhrases := []string{"I am thinking", "I am thinking.", "I am thinking..", "I am thinking..."}
 
-		for i := 0; i < 200; i++ { // Run for about 2 seconds max
+		for i := 0; i < 500; i++ { // Run for about 5 seconds max
 			phrase := thinkingPhrases[i%len(thinkingPhrases)]
-			fmt.Print("\r🤖 AI: " + phrase + "   ")
+			fmt.Print("\r🤖: " + phrase + "   ")
 			time.Sleep(100 * time.Millisecond)
 		}
 	}()
@@ -289,6 +290,47 @@ func talkToOllamaStream(url string, ollamaReq Request, onContent func(string)) e
 	}
 
 	return scanner.Err()
+}
+
+// OllamaModel represents a model from Ollama
+type OllamaModel struct {
+	Name       string    `json:"name"`
+	ModifiedAt time.Time `json:"modified_at"`
+	Size       int64     `json:"size"`
+	Digest     string    `json:"digest"`
+	Details    struct {
+		Format            string   `json:"format"`
+		Family            string   `json:"family"`
+		Families          []string `json:"families"`
+		ParameterSize     string   `json:"parameter_size"`
+		QuantizationLevel string   `json:"quantization_level"`
+	} `json:"details"`
+}
+
+// OllamaModelsResponse represents the response from Ollama list API
+type OllamaModelsResponse struct {
+	Models []OllamaModel `json:"models"`
+}
+
+// ListOllamaModels fetches and returns the list of installed Ollama models
+func ListOllamaModels() ([]OllamaModel, error) {
+	client := http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(ollamaListURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to ollama: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ollama API returned status %d", resp.StatusCode)
+	}
+
+	var modelsResponse OllamaModelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&modelsResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return modelsResponse.Models, nil
 }
 
 // TalkToOllamaWithTyping provides enhanced typing simulation
