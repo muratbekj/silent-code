@@ -73,26 +73,16 @@ func startInteractiveMode() {
 	}
 }
 
-// List of common shell commands that should be executed directly
-var shellCommands = map[string]bool{
-	"ls": true, "cd": true, "pwd": true, "mkdir": true, "rmdir": true, "rm": true,
-	"touch": true, "cp": true, "mv": true, "cat": true, "less": true, "more": true,
-	"head": true, "tail": true, "grep": true, "find": true, "which": true, "whereis": true,
-	"ps": true, "top": true, "kill": true, "killall": true, "jobs": true, "bg": true, "fg": true,
-	"git": true, "docker": true, "kubectl": true, "npm": true, "yarn": true, "pip": true,
-	"go": true, "python": true, "node": true, "java": true, "gcc": true, "make": true,
-	"curl": true, "wget": true, "ssh": true, "scp": true, "rsync": true,
-	"chmod": true, "chown": true, "sudo": true, "su": true, "passwd": true,
-	"df": true, "du": true, "free": true, "uptime": true, "who": true, "whoami": true,
-	"uname": true, "date": true, "cal": true, "echo": true, "printf": true,
-	"sort": true, "uniq": true, "wc": true, "cut": true, "awk": true, "sed": true,
-	"tar": true, "zip": true, "unzip": true, "gzip": true, "gunzip": true,
-	"vim": true, "nano": true, "emacs": true, "code": true, "subl": true,
-	"man": true, "info": true, "help": true, "history": true, "alias": true,
+// List of app-specific commands that should NOT be treated as shell commands
+var appCommands = map[string]bool{
+	"help": true, "explain": true, "generate": true, "test": true, "search": true,
+	"config": true, "status": true, "sessions": true, "context": true, "prompt": true,
+	"reason": true, "steps": true, "read": true, "edit": true, "new": true,
+	"exit": true, "quit": true,
 }
 
-func isShellCommand(command string) bool {
-	return shellCommands[command]
+func isAppCommand(command string) bool {
+	return appCommands[command]
 }
 
 func handleCommand(input string) {
@@ -104,8 +94,16 @@ func handleCommand(input string) {
 	command := parts[0]
 	args := parts[1:]
 
-	// Check if it's a shell command first
-	if isShellCommand(command) {
+	// Check if it's an app command (with or without / prefix)
+	appCommand := command
+	if strings.HasPrefix(command, "/") {
+		appCommand = command[1:] // Remove the / prefix
+	}
+
+	if isAppCommand(appCommand) {
+		// Handle app commands
+	} else {
+		// Everything else is treated as a shell command
 		handleShellCommand(input)
 		return
 	}
