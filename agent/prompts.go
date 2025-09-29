@@ -35,11 +35,12 @@ func getSystemPrompt() string {
 Guidelines:
 - Always format code blocks with proper syntax highlighting
 - Provide clear, actionable explanations
-- Focus on Go development when relevant
+- Detect and work with the appropriate programming language for the project
 - Be concise but thorough
 - Be natural with your responses
 - Ask clarifying questions when needed
 - Maintain context across the conversation
+- Support multiple programming languages (Python, JavaScript, TypeScript, Go, Java, C++, C#, PHP, Ruby, Rust, Swift, Kotlin, etc.)
 
 When answering questions, be sure to include the following:
 - The question being answered
@@ -52,14 +53,22 @@ You are running locally via Ollama and have access to the project files.`
 
 // LoadProjectContext loads relevant project information
 func (pb *PromptBuilder) LoadProjectContext(projectPath string) error {
-	// Load go.mod for project info
-	goModPath := filepath.Join(projectPath, "go.mod")
-	if data, err := os.ReadFile(goModPath); err == nil {
-		pb.ProjectInfo = fmt.Sprintf("Project Info:\n```go\n%s\n```\n", string(data))
+	// Detect project type and load appropriate files
+	projectType := detectProjectType(projectPath)
+
+	// Load project-specific configuration files
+	configFiles := getConfigFiles(projectType)
+	for _, file := range configFiles {
+		filePath := filepath.Join(projectPath, file)
+		if data, err := os.ReadFile(filePath); err == nil {
+			ext := filepath.Ext(file)
+			language := getLanguageFromExtension(ext)
+			pb.ProjectInfo += fmt.Sprintf("Project Info (%s):\n```%s\n%s\n```\n", file, language, string(data))
+		}
 	}
 
-	// Load main files for context
-	mainFiles := []string{"main.go", "cmd/root.go", "README.md"}
+	// Load main files for context based on project type
+	mainFiles := getMainFiles(projectType)
 	var contextParts []string
 
 	for _, file := range mainFiles {
@@ -70,10 +79,156 @@ func (pb *PromptBuilder) LoadProjectContext(projectPath string) error {
 	}
 
 	if len(contextParts) > 0 {
-		pb.CodeContext = fmt.Sprintf("Current Project Files:\n```go\n%s\n```\n", strings.Join(contextParts, "\n\n"))
+		// Use the most common language in the project for code context
+		primaryLanguage := getPrimaryLanguage(projectPath)
+		pb.CodeContext = fmt.Sprintf("Current Project Files:\n```%s\n%s\n```\n", primaryLanguage, strings.Join(contextParts, "\n\n"))
 	}
 
 	return nil
+}
+
+// detectProjectType detects the type of project based on configuration files
+func detectProjectType(projectPath string) string {
+	configFiles := map[string]string{
+		"go.mod":           "Go",
+		"package.json":     "JavaScript/Node.js",
+		"requirements.txt": "Python",
+		"pom.xml":          "Java",
+		"build.gradle":     "Java/Gradle",
+		"cargo.toml":       "Rust",
+		"composer.json":    "PHP",
+		"Gemfile":          "Ruby",
+		"Podfile":          "Swift/Objective-C",
+		"mix.exs":          "Elixir",
+		"pubspec.yaml":     "Dart/Flutter",
+	}
+
+	for file, projectType := range configFiles {
+		if _, err := os.Stat(filepath.Join(projectPath, file)); err == nil {
+			return projectType
+		}
+	}
+
+	return "Unknown"
+}
+
+// getConfigFiles returns configuration files for a project type
+func getConfigFiles(projectType string) []string {
+	configMap := map[string][]string{
+		"Go":                 {"go.mod", "go.sum"},
+		"JavaScript/Node.js": {"package.json", "package-lock.json", "yarn.lock"},
+		"Python":             {"requirements.txt", "setup.py", "pyproject.toml"},
+		"Java":               {"pom.xml", "build.gradle"},
+		"Java/Gradle":        {"build.gradle", "gradle.properties"},
+		"Rust":               {"cargo.toml", "Cargo.lock"},
+		"PHP":                {"composer.json", "composer.lock"},
+		"Ruby":               {"Gemfile", "Gemfile.lock"},
+		"Swift/Objective-C":  {"Podfile", "Podfile.lock"},
+		"Elixir":             {"mix.exs", "mix.lock"},
+		"Dart/Flutter":       {"pubspec.yaml", "pubspec.lock"},
+	}
+
+	if files, exists := configMap[projectType]; exists {
+		return files
+	}
+
+	return []string{}
+}
+
+// getMainFiles returns main files for a project type
+func getMainFiles(projectType string) []string {
+	mainFilesMap := map[string][]string{
+		"Go":                 {"main.go", "cmd/root.go", "README.md"},
+		"JavaScript/Node.js": {"index.js", "app.js", "server.js", "package.json", "README.md"},
+		"Python":             {"main.py", "app.py", "requirements.txt", "README.md"},
+		"Java":               {"src/main/java", "pom.xml", "README.md"},
+		"Java/Gradle":        {"src/main/java", "build.gradle", "README.md"},
+		"Rust":               {"src/main.rs", "Cargo.toml", "README.md"},
+		"PHP":                {"index.php", "composer.json", "README.md"},
+		"Ruby":               {"main.rb", "app.rb", "Gemfile", "README.md"},
+		"Swift/Objective-C":  {"main.swift", "AppDelegate.swift", "README.md"},
+		"Elixir":             {"lib", "mix.exs", "README.md"},
+		"Dart/Flutter":       {"lib/main.dart", "pubspec.yaml", "README.md"},
+	}
+
+	if files, exists := mainFilesMap[projectType]; exists {
+		return files
+	}
+
+	return []string{"README.md"}
+}
+
+// getLanguageFromExtension returns the language name for a file extension
+func getLanguageFromExtension(ext string) string {
+	languageMap := map[string]string{
+		".go":    "go",
+		".js":    "javascript",
+		".ts":    "typescript",
+		".py":    "python",
+		".java":  "java",
+		".cpp":   "cpp",
+		".c":     "c",
+		".cs":    "csharp",
+		".php":   "php",
+		".rb":    "ruby",
+		".rs":    "rust",
+		".swift": "swift",
+		".kt":    "kotlin",
+		".scala": "scala",
+		".r":     "r",
+		".m":     "objc",
+		".mm":    "objcpp",
+		".pl":    "perl",
+		".sh":    "bash",
+		".lua":   "lua",
+		".dart":  "dart",
+		".vue":   "vue",
+		".html":  "html",
+		".css":   "css",
+		".scss":  "scss",
+		".sass":  "sass",
+		".less":  "less",
+		".xml":   "xml",
+		".yaml":  "yaml",
+		".yml":   "yaml",
+		".json":  "json",
+		".toml":  "toml",
+		".ini":   "ini",
+		".sql":   "sql",
+		".md":    "markdown",
+		".txt":   "text",
+	}
+
+	if lang, exists := languageMap[strings.ToLower(ext)]; exists {
+		return lang
+	}
+
+	return "text"
+}
+
+// getPrimaryLanguage determines the primary language of the project
+func getPrimaryLanguage(projectPath string) string {
+	projectType := detectProjectType(projectPath)
+
+	languageMap := map[string]string{
+		"Go":                 "go",
+		"JavaScript/Node.js": "javascript",
+		"Python":             "python",
+		"Java":               "java",
+		"Java/Gradle":        "java",
+		"Rust":               "rust",
+		"PHP":                "php",
+		"Ruby":               "ruby",
+		"Swift/Objective-C":  "swift",
+		"Elixir":             "elixir",
+		"Dart/Flutter":       "dart",
+	}
+
+	if lang, exists := languageMap[projectType]; exists {
+		return lang
+	}
+
+	return "go" // Default fallback
 }
 
 // BuildPrompt constructs the full prompt with context

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -85,6 +86,63 @@ func isAppCommand(command string) bool {
 	return appCommands[command]
 }
 
+// isGeneralQuestion checks if the input looks like a general question to the AI
+func isGeneralQuestion(input string) bool {
+	// Check for question words and patterns
+	questionWords := []string{
+		"what", "how", "why", "when", "where", "who", "which", "can", "could", "would", "should",
+		"is", "are", "was", "were", "do", "does", "did", "will", "have", "has", "had",
+		"explain", "describe", "tell", "show", "help", "analyze", "review", "check",
+	}
+
+	// Check for question patterns
+	questionPatterns := []string{
+		"what is", "how does", "why is", "when does", "where is", "who is", "which is",
+		"can you", "could you", "would you", "should i", "is this", "are there",
+		"do you", "does this", "did you", "will this", "have you", "has this",
+		"explain this", "describe this", "tell me", "show me", "help me",
+		"analyze this", "review this", "check this",
+	}
+
+	inputLower := strings.ToLower(input)
+
+	// Check for question words at the beginning
+	firstWord := strings.Fields(inputLower)[0]
+	for _, word := range questionWords {
+		if firstWord == word {
+			return true
+		}
+	}
+
+	// Check for question patterns
+	for _, pattern := range questionPatterns {
+		if strings.HasPrefix(inputLower, pattern) {
+			return true
+		}
+	}
+
+	// Check for question mark
+	if strings.HasSuffix(input, "?") {
+		return true
+	}
+
+	// Check if it contains multiple words and doesn't look like a shell command
+	words := strings.Fields(inputLower)
+	if len(words) >= 2 {
+		// If it has multiple words and doesn't start with common shell commands, treat as question
+		shellCommands := []string{"ls", "cd", "pwd", "cat", "grep", "find", "mkdir", "rm", "cp", "mv", "chmod", "sudo", "git", "npm", "pip", "python", "node", "go", "cargo", "mvn", "gradle"}
+		firstWord = words[0]
+		for _, cmd := range shellCommands {
+			if firstWord == cmd {
+				return false // It's a shell command
+			}
+		}
+		return true // Multiple words, not a shell command, probably a question
+	}
+
+	return false
+}
+
 func handleCommand(input string) {
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
@@ -103,6 +161,12 @@ func handleCommand(input string) {
 	if isAppCommand(appCommand) {
 		// Handle app commands
 	} else {
+		// Check if it looks like a general question (not a shell command)
+		if isGeneralQuestion(input) {
+			// Handle as general question to AI
+			handleGeneralQuestion(input)
+			return
+		}
 		// Everything else is treated as a shell command
 		handleShellCommand(input)
 		return
@@ -316,9 +380,25 @@ func handleStatus() {
 func handleContext() {
 	fmt.Println("📁 Project Context:")
 	fmt.Println("  • Current directory: .")
-	fmt.Println("  • Project type: Go")
-	fmt.Println("  • Main files: main.go, cmd/root.go")
-	fmt.Println("  • Dependencies: cobra, ollama")
+
+	// Detect project type dynamically
+	projectType := detectProjectType(".")
+	fmt.Printf("  • Project type: %s\n", projectType)
+
+	// Get actual files in the directory
+	actualFiles := getActualFiles(".")
+	if len(actualFiles) > 0 {
+		fmt.Printf("  • Main files: %s\n", strings.Join(actualFiles, ", "))
+	}
+
+	// Get dependencies based on project type
+	dependencies := getDependencies(projectType)
+	if len(dependencies) > 0 {
+		fmt.Printf("  • Dependencies: %s\n", strings.Join(dependencies, ", "))
+	} else {
+		fmt.Println("  • Dependencies: None")
+	}
+
 	fmt.Println("  💡 Context is automatically loaded for better AI responses")
 }
 
@@ -365,7 +445,101 @@ func handleSteps() {
 }
 
 func handleGeneralQuestion(input string) {
-	ollama.TalkToOllama(input, currentSessionID, historyManager)
+	// Use MCP to analyze the project and answer the question
+	client := mcp.NewMCPClient("http://127.0.0.1:8080")
+
+	// First, get the current directory contents
+	result, err := client.ExecuteShell("ls -la")
+	if err != nil {
+		fmt.Printf("❌ Error getting directory contents: %v\n", err)
+		// Fallback to regular AI response
+		ollama.TalkToOllama(input, currentSessionID, historyManager)
+		return
+	}
+
+	if !result.Success {
+		fmt.Printf("❌ Failed to get directory contents: %s\n", result.Error)
+		// Fallback to regular AI response
+		ollama.TalkToOllama(input, currentSessionID, historyManager)
+		return
+	}
+
+	// Build enhanced question with directory contents
+	enhancedQuestion := fmt.Sprintf("%s\n\nCurrent directory contents:\n%s", input, result.Output)
+
+	// For file-specific questions, try to read relevant files
+	if shouldReadFiles(input) {
+		fileContents := readRelevantFiles()
+		if fileContents != "" {
+			enhancedQuestion += "\n\nFile contents:\n" + fileContents
+		}
+	}
+
+	// Send enhanced question to AI
+	ollama.TalkToOllama(enhancedQuestion, currentSessionID, historyManager)
+}
+
+// shouldReadFiles determines if the question would benefit from file contents
+func shouldReadFiles(question string) bool {
+	questionLower := strings.ToLower(question)
+
+	// Questions that would benefit from file contents
+	fileRelatedKeywords := []string{
+		"what is", "what does", "what's in", "what are",
+		"how does", "how is", "how are",
+		"explain", "describe", "analyze", "review",
+		"code", "function", "class", "method", "variable",
+		"project", "folder", "directory", "files",
+		"main", "app", "script", "program",
+	}
+
+	for _, keyword := range fileRelatedKeywords {
+		if strings.Contains(questionLower, keyword) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// readRelevantFiles reads the most relevant files in the directory
+func readRelevantFiles() string {
+	client := mcp.NewMCPClient("http://127.0.0.1:8080")
+
+	// Get list of files
+	result, err := client.ExecuteShell("ls -1")
+	if err != nil || !result.Success {
+		return ""
+	}
+
+	files := strings.Split(strings.TrimSpace(result.Output), "\n")
+	var fileContents []string
+
+	// Read up to 3 most relevant files
+	fileCount := 0
+	for _, file := range files {
+		if fileCount >= 3 {
+			break
+		}
+
+		// Skip directories and non-source files
+		if strings.Contains(file, "/") ||
+			strings.HasPrefix(file, ".") ||
+			file == "silent-code" ||
+			file == "go.sum" ||
+			file == "LICENSE" {
+			continue
+		}
+
+		// Try to read the file
+		readResult, err := client.ReadFile(file)
+		if err == nil && readResult.Success {
+			fileContents = append(fileContents, fmt.Sprintf("=== %s ===\n%s", file, readResult.Content))
+			fileCount++
+		}
+	}
+
+	return strings.Join(fileContents, "\n\n")
 }
 
 func init() {
@@ -501,4 +675,312 @@ func handleShellCommand(command string) {
 
 func RootCmd() {
 	rootCmd.Execute()
+}
+
+// detectProjectType detects the type of project based on configuration files and current files
+func detectProjectType(projectPath string) string {
+	// First, check for Python files (most common for current work)
+	if hasPythonFiles(projectPath) {
+		return "Python"
+	}
+
+	// Then check for other languages based on file extensions
+	if hasJavaScriptFiles(projectPath) {
+		return "JavaScript/Node.js"
+	}
+
+	if hasTypeScriptFiles(projectPath) {
+		return "TypeScript"
+	}
+
+	// Check configuration files
+	configFiles := map[string]string{
+		"requirements.txt": "Python",
+		"package.json":     "JavaScript/Node.js",
+		"go.mod":           "Go",
+		"pom.xml":          "Java",
+		"build.gradle":     "Java/Gradle",
+		"cargo.toml":       "Rust",
+		"composer.json":    "PHP",
+		"Gemfile":          "Ruby",
+		"Podfile":          "Swift/Objective-C",
+		"mix.exs":          "Elixir",
+		"pubspec.yaml":     "Dart/Flutter",
+	}
+
+	for file, projectType := range configFiles {
+		if _, err := os.Stat(filepath.Join(projectPath, file)); err == nil {
+			return projectType
+		}
+	}
+
+	return "Unknown"
+}
+
+// hasPythonFiles checks if there are Python files in the directory
+func hasPythonFiles(projectPath string) bool {
+	files, err := os.ReadDir(projectPath)
+	if err != nil {
+		return false
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".py") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasJavaScriptFiles checks if there are JavaScript files in the directory
+func hasJavaScriptFiles(projectPath string) bool {
+	files, err := os.ReadDir(projectPath)
+	if err != nil {
+		return false
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && (strings.HasSuffix(file.Name(), ".js") || strings.HasSuffix(file.Name(), ".jsx")) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTypeScriptFiles checks if there are TypeScript files in the directory
+func hasTypeScriptFiles(projectPath string) bool {
+	files, err := os.ReadDir(projectPath)
+	if err != nil {
+		return false
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && (strings.HasSuffix(file.Name(), ".ts") || strings.HasSuffix(file.Name(), ".tsx")) {
+			return true
+		}
+	}
+	return false
+}
+
+// getActualFiles returns the actual files in the directory
+func getActualFiles(projectPath string) []string {
+	files, err := os.ReadDir(projectPath)
+	if err != nil {
+		return []string{}
+	}
+
+	var actualFiles []string
+	for _, file := range files {
+		if !file.IsDir() {
+			// Skip hidden files and common non-source files
+			fileName := file.Name()
+			if !strings.HasPrefix(fileName, ".") &&
+				fileName != "silent-code" &&
+				fileName != "go.sum" &&
+				fileName != "LICENSE" {
+				actualFiles = append(actualFiles, fileName)
+			}
+		}
+	}
+
+	return actualFiles
+}
+
+// getMainFiles returns main files for a project type (kept for backward compatibility)
+func getMainFiles(projectType string) []string {
+	mainFilesMap := map[string][]string{
+		"Go":                 {"main.go", "cmd/root.go", "README.md"},
+		"JavaScript/Node.js": {"index.js", "app.js", "server.js", "package.json", "README.md"},
+		"Python":             {"main.py", "app.py", "requirements.txt", "README.md"},
+		"Java":               {"src/main/java", "pom.xml", "README.md"},
+		"Java/Gradle":        {"src/main/java", "build.gradle", "README.md"},
+		"Rust":               {"src/main.rs", "Cargo.toml", "README.md"},
+		"PHP":                {"index.php", "composer.json", "README.md"},
+		"Ruby":               {"main.rb", "app.rb", "Gemfile", "README.md"},
+		"Swift/Objective-C":  {"main.swift", "AppDelegate.swift", "README.md"},
+		"Elixir":             {"lib", "mix.exs", "README.md"},
+		"Dart/Flutter":       {"lib/main.dart", "pubspec.yaml", "README.md"},
+	}
+
+	if files, exists := mainFilesMap[projectType]; exists {
+		return files
+	}
+
+	return []string{"README.md"}
+}
+
+// getDependencies returns actual dependencies found in the project
+func getDependencies(projectType string) []string {
+	// Check for actual dependency files first
+	actualDeps := getActualDependencies(".")
+	if len(actualDeps) > 0 {
+		return actualDeps
+	}
+
+	// If no actual dependencies found, return empty
+	return []string{}
+}
+
+// getActualDependencies scans for actual dependency files and extracts dependencies
+func getActualDependencies(projectPath string) []string {
+	var dependencies []string
+
+	// Check for Python requirements.txt
+	if requirementsPath := filepath.Join(projectPath, "requirements.txt"); fileExists(requirementsPath) {
+		if deps := parseRequirementsTxt(requirementsPath); len(deps) > 0 {
+			dependencies = append(dependencies, deps...)
+		}
+	}
+
+	// Check for Node.js package.json
+	if packageJsonPath := filepath.Join(projectPath, "package.json"); fileExists(packageJsonPath) {
+		if deps := parsePackageJson(packageJsonPath); len(deps) > 0 {
+			dependencies = append(dependencies, deps...)
+		}
+	}
+
+	// Check for Go go.mod
+	if goModPath := filepath.Join(projectPath, "go.mod"); fileExists(goModPath) {
+		if deps := parseGoMod(goModPath); len(deps) > 0 {
+			dependencies = append(dependencies, deps...)
+		}
+	}
+
+	// Check for other dependency files
+	otherDeps := checkOtherDependencyFiles(projectPath)
+	dependencies = append(dependencies, otherDeps...)
+
+	return dependencies
+}
+
+// fileExists checks if a file exists
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// parseRequirementsTxt parses Python requirements.txt file
+func parseRequirementsTxt(path string) []string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return []string{}
+	}
+
+	var deps []string
+	lines := strings.Split(string(content), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Extract package name (before ==, >=, etc.)
+		parts := strings.FieldsFunc(line, func(r rune) bool {
+			return r == '=' || r == '>' || r == '<' || r == '!' || r == '~'
+		})
+		if len(parts) > 0 {
+			packageName := strings.TrimSpace(parts[0])
+			if packageName != "" {
+				deps = append(deps, packageName)
+			}
+		}
+	}
+
+	return deps
+}
+
+// parsePackageJson parses Node.js package.json file
+func parsePackageJson(path string) []string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return []string{}
+	}
+
+	// Simple JSON parsing for dependencies
+	var deps []string
+	lines := strings.Split(string(content), "\n")
+
+	inDependencies := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		if strings.Contains(line, "\"dependencies\"") {
+			inDependencies = true
+			continue
+		}
+
+		if inDependencies {
+			if strings.Contains(line, "}") && !strings.Contains(line, "\"") {
+				break
+			}
+
+			if strings.Contains(line, "\"") && strings.Contains(line, ":") {
+				// Extract package name
+				parts := strings.Split(line, "\"")
+				if len(parts) >= 2 {
+					packageName := strings.TrimSpace(parts[1])
+					if packageName != "" && packageName != "dependencies" {
+						deps = append(deps, packageName)
+					}
+				}
+			}
+		}
+	}
+
+	return deps
+}
+
+// parseGoMod parses Go go.mod file
+func parseGoMod(path string) []string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return []string{}
+	}
+
+	var deps []string
+	lines := strings.Split(string(content), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "require") {
+			continue
+		}
+
+		if strings.Contains(line, " ") && !strings.HasPrefix(line, "module") && !strings.HasPrefix(line, "go ") {
+			parts := strings.Fields(line)
+			if len(parts) > 0 {
+				packageName := parts[0]
+				if !strings.Contains(packageName, "/") || strings.Count(packageName, "/") > 1 {
+					// This looks like a dependency
+					deps = append(deps, packageName)
+				}
+			}
+		}
+	}
+
+	return deps
+}
+
+// checkOtherDependencyFiles checks for other dependency files
+func checkOtherDependencyFiles(projectPath string) []string {
+	var deps []string
+
+	// Check for other common dependency files
+	dependencyFiles := []string{
+		"composer.json", // PHP
+		"Gemfile",       // Ruby
+		"Cargo.toml",    // Rust
+		"pom.xml",       // Java
+		"build.gradle",  // Java/Gradle
+	}
+
+	for _, file := range dependencyFiles {
+		if fileExists(filepath.Join(projectPath, file)) {
+			// For now, just indicate the file exists
+			deps = append(deps, file)
+		}
+	}
+
+	return deps
 }

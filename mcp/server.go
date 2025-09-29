@@ -58,6 +58,87 @@ func NewOllamaClient(baseURL, model string) *OllamaClient {
 	}
 }
 
+// detectLanguage detects the programming language based on file extension and project structure
+func detectLanguage(filePath string) string {
+	ext := strings.ToLower(filepath.Ext(filePath))
+
+	// Language detection based on file extension
+	languageMap := map[string]string{
+		".py":     "Python",
+		".js":     "JavaScript",
+		".ts":     "TypeScript",
+		".tsx":    "TypeScript",
+		".jsx":    "JavaScript",
+		".go":     "Go",
+		".java":   "Java",
+		".cpp":    "C++",
+		".c":      "C",
+		".cs":     "C#",
+		".php":    "PHP",
+		".rb":     "Ruby",
+		".rs":     "Rust",
+		".swift":  "Swift",
+		".kt":     "Kotlin",
+		".scala":  "Scala",
+		".r":      "R",
+		".m":      "Objective-C",
+		".mm":     "Objective-C++",
+		".pl":     "Perl",
+		".sh":     "Shell",
+		".bash":   "Bash",
+		".zsh":    "Zsh",
+		".fish":   "Fish",
+		".ps1":    "PowerShell",
+		".lua":    "Lua",
+		".dart":   "Dart",
+		".vue":    "Vue",
+		".svelte": "Svelte",
+		".html":   "HTML",
+		".css":    "CSS",
+		".scss":   "SCSS",
+		".sass":   "Sass",
+		".less":   "Less",
+		".xml":    "XML",
+		".yaml":   "YAML",
+		".yml":    "YAML",
+		".json":   "JSON",
+		".toml":   "TOML",
+		".ini":    "INI",
+		".cfg":    "Config",
+		".conf":   "Config",
+		".sql":    "SQL",
+		".md":     "Markdown",
+		".txt":    "Text",
+	}
+
+	if lang, exists := languageMap[ext]; exists {
+		return lang
+	}
+
+	// Check for special files that indicate project type
+	baseName := strings.ToLower(filepath.Base(filePath))
+	specialFiles := map[string]string{
+		"package.json":     "JavaScript/Node.js",
+		"requirements.txt": "Python",
+		"pom.xml":          "Java",
+		"build.gradle":     "Java/Gradle",
+		"cargo.toml":       "Rust",
+		"go.mod":           "Go",
+		"composer.json":    "PHP",
+		"gemfile":          "Ruby",
+		"podfile":          "Swift/Objective-C",
+		"mix.exs":          "Elixir",
+		"pubspec.yaml":     "Dart/Flutter",
+	}
+
+	if lang, exists := specialFiles[baseName]; exists {
+		return lang
+	}
+
+	// Default to Go if no specific language detected
+	return "Go"
+}
+
 func (o *OllamaClient) Generate(prompt string) (string, error) {
 	// Add timeout context
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second) // Increased to 5 minutes
@@ -262,13 +343,16 @@ func handleCreateFile(params map[string]interface{}, ollamaClient *OllamaClient)
 		}, nil
 	}
 
+	// Detect the programming language
+	language := detectLanguage(filePath)
+
 	// Generate file content using Ollama
-	prompt := fmt.Sprintf(`Create a new Go file with the following requirements:
+	prompt := fmt.Sprintf(`Create a new %s file with the following requirements:
 
 FILE PATH: %s
 REQUIREMENTS: %s
 
-Return ONLY the complete Go file content with proper package declaration, imports, and implementation. Do not include explanations or markdown formatting.`, filePath, requirements)
+Return ONLY the complete %s file content with proper syntax, imports, and implementation. Do not include explanations or markdown formatting.`, language, filePath, requirements, language)
 
 	response, err := ollamaClient.Generate(prompt)
 	if err != nil {
@@ -325,8 +409,11 @@ func handleEditFile(params map[string]interface{}, ollamaClient *OllamaClient) (
 		}, nil
 	}
 
+	// Detect the programming language
+	language := detectLanguage(filePath)
+
 	// Generate edit using Ollama
-	prompt := fmt.Sprintf(`Edit this Go file by making the requested change.
+	prompt := fmt.Sprintf(`Edit this %s file by making the requested change.
 
 FILE: %s
 CURRENT CONTENT:
@@ -334,7 +421,7 @@ CURRENT CONTENT:
 
 REQUESTED CHANGE: %s
 
-Return ONLY the complete modified file content. Do not include explanations or markdown formatting.`, filePath, string(content), editRequest)
+Return ONLY the complete modified file content. Do not include explanations or markdown formatting.`, language, filePath, string(content), editRequest)
 
 	response, err := ollamaClient.Generate(prompt)
 	if err != nil {
@@ -403,8 +490,11 @@ func handleAnalyzeCode(params map[string]interface{}, ollamaClient *OllamaClient
 		}, nil
 	}
 
+	// Detect the programming language
+	language := detectLanguage(filePath)
+
 	// Generate analysis using Ollama
-	prompt := fmt.Sprintf(`Analyze this Go code and answer the question.
+	prompt := fmt.Sprintf(`Analyze this %s code and answer the question.
 
 FILE: %s
 CODE:
@@ -412,7 +502,7 @@ CODE:
 
 QUESTION: %s
 
-Provide a detailed analysis and answer.`, filePath, string(content), question)
+Provide a detailed analysis and answer.`, language, filePath, string(content), question)
 
 	response, err := ollamaClient.Generate(prompt)
 	if err != nil {
@@ -444,8 +534,11 @@ func handleExplainCode(params map[string]interface{}, ollamaClient *OllamaClient
 		}, nil
 	}
 
+	// Detect the programming language
+	language := detectLanguage(filePath)
+
 	// Generate detailed explanation using Ollama
-	prompt := fmt.Sprintf(`Explain this Go code in detail. Provide a comprehensive explanation covering:
+	prompt := fmt.Sprintf(`Explain this %s code in detail. Provide a comprehensive explanation covering:
 
 1. What this code does overall
 2. Key functions and their purposes
@@ -458,7 +551,7 @@ FILE: %s
 CODE:
 %s
 
-Provide a clear, detailed explanation that would help someone understand this code.`, filePath, string(content))
+Provide a clear, detailed explanation that would help someone understand this code.`, language, filePath, string(content))
 
 	response, err := ollamaClient.Generate(prompt)
 	if err != nil {
@@ -476,22 +569,40 @@ Provide a clear, detailed explanation that would help someone understand this co
 }
 
 func cleanAIResponse(response string) string {
-	// Remove markdown code blocks
-	response = strings.TrimPrefix(response, "```go")
-	response = strings.TrimPrefix(response, "```")
+	// Remove markdown code blocks for various languages
+	codeBlockPrefixes := []string{
+		"```go", "```python", "```javascript", "```typescript", "```java", "```cpp", "```c",
+		"```csharp", "```php", "```ruby", "```rust", "```swift", "```kotlin", "```scala",
+		"```r", "```perl", "```lua", "```dart", "```vue", "```svelte", "```html", "```css",
+		"```scss", "```sass", "```less", "```xml", "```yaml", "```json", "```toml", "```ini",
+		"```sql", "```markdown", "```text", "```",
+	}
+
+	for _, prefix := range codeBlockPrefixes {
+		response = strings.TrimPrefix(response, prefix)
+	}
 	response = strings.TrimSuffix(response, "```")
 
-	// Remove common AI prefixes
+	// Remove common AI prefixes for various languages
 	prefixes := []string{
-		"Here's the Go code:",
-		"Here is the Go code:",
-		"Here's the complete file:",
-		"Here is the complete file:",
-		"The Go code is:",
-		"Here's your file:",
-		"Here is your file:",
-		"Here's the modified file:",
-		"Here is the modified file:",
+		"Here's the code:", "Here is the code:",
+		"Here's the Go code:", "Here is the Go code:",
+		"Here's the Python code:", "Here is the Python code:",
+		"Here's the JavaScript code:", "Here is the JavaScript code:",
+		"Here's the TypeScript code:", "Here is the TypeScript code:",
+		"Here's the Java code:", "Here is the Java code:",
+		"Here's the C++ code:", "Here is the C++ code:",
+		"Here's the C# code:", "Here is the C# code:",
+		"Here's the PHP code:", "Here is the PHP code:",
+		"Here's the Ruby code:", "Here is the Ruby code:",
+		"Here's the Rust code:", "Here is the Rust code:",
+		"Here's the Swift code:", "Here is the Swift code:",
+		"Here's the Kotlin code:", "Here is the Kotlin code:",
+		"Here's the complete file:", "Here is the complete file:",
+		"The code is:", "The Go code is:", "The Python code is:",
+		"Here's your file:", "Here is your file:",
+		"Here's the modified file:", "Here is the modified file:",
+		"Here's the updated file:", "Here is the updated file:",
 	}
 
 	for _, prefix := range prefixes {
