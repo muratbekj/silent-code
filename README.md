@@ -18,19 +18,28 @@ I thought it would be cool to build a AI coding assistant that uses your models 
 
 ### Prerequisites
 
-1. **Install Ollama** (if not already installed):
+1. **Install Ollama** (if not already installed) and **Go**:
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
+
+
 ```
 
-2. **Pull a coding model** (recommended):
+2. **Pull a coding model** (any of these work great):
 ```bash
 # For best performance (requires more RAM)
 ollama pull codellama:13b
 
 # For lighter usage
 ollama pull qwen2.5-coder:7b
+
+# Other excellent coding models
+ollama pull deepseek-coder:6.7b
+ollama pull starcoder2:7b
+ollama pull magicoder:7b
 ```
+
+**🎯 Smart Model Selection**: Silent Code automatically detects and selects the best available model for coding tasks. No configuration needed!
 
 3. **Start Ollama server**:
 ```bash
@@ -94,14 +103,18 @@ silent-code> npm install
 
 ### Model Selection
 
+Silent Code automatically selects the best available model for coding tasks. You can view and switch models:
+
 ```bash
 silent-code> /config
 ```
 
-Switch models:
+Switch to a specific model:
 ```bash
 silent-code> /config models codellama:13b
 ```
+
+**Model Priority**: The system prioritizes coding-specialized models like CodeLlama, Qwen2.5-Coder, DeepSeek-Coder, and StarCoder2, automatically choosing the best one available on your system.
 
 ## 🏗️ Architecture
 

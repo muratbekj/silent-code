@@ -43,6 +43,17 @@ func startInteractiveMode() {
 	// Initialize history
 	historyManager = history.NewHistoryManager("./history/sessions")
 
+	// Initialize model selection
+	fmt.Print("🔍 Detecting available models... ")
+	err := ollama.InitializeModelSelection()
+	if err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
+		fmt.Println("💡 Make sure Ollama is running: ollama serve")
+		fmt.Println("💡 Install a model: ollama pull codellama:13b")
+		return
+	}
+	fmt.Printf("✅ Using model: %s\n", ollama.GetCurrentModel())
+
 	// Create new session
 	currentSessionID = fmt.Sprintf("session_%d", time.Now().Unix())
 

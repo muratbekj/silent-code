@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"silent-code/agent"
@@ -48,11 +49,124 @@ const ollamaListURL = "http://localhost:11434/api/tags"
 var reasoningManager *agent.ReasoningManager
 
 // Global model configuration
-var currentModel = "codellama:13b"
+var currentModel = ""
 
 // InitializeReasoning sets up the reasoning manager
 func InitializeReasoning() {
 	reasoningManager = agent.NewReasoningManager()
+}
+
+// InitializeModelSelection automatically selects the best available model
+func InitializeModelSelection() error {
+	models, err := ListOllamaModels()
+	if err != nil {
+		return fmt.Errorf("failed to list models: %w", err)
+	}
+
+	if len(models) == 0 {
+		return fmt.Errorf("no models available. Please install a model first: ollama pull codellama:13b")
+	}
+
+	// Select the best model based on priority
+	selectedModel := selectBestModel(models)
+	currentModel = selectedModel.Name
+
+	return nil
+}
+
+// selectBestModel chooses the best model based on coding capabilities and performance
+func selectBestModel(models []OllamaModel) OllamaModel {
+	// Define model priorities for coding tasks
+	// Higher priority models are better for coding
+	modelPriorities := map[string]int{
+		"qwen2.5-coder:7b":    100,
+		"codellama:13b":       95,
+		"codellama:34b":       90,
+		"qwen2.5-coder:32b":   85,
+		"qwen2.5-coder:14b":   80,
+		"deepseek-coder:33b":  75,
+		"magicoder:15b":       70,
+		"deepseek-coder:6.7b": 65,
+		"starcoder2:15b":      60,
+		"magicoder:7b":        55,
+		"starcoder2:7b":       50,
+		"starcoder2:3b":       45,
+		"qwen2.5:32b":         40,
+		"qwen2.5:14b":         35,
+		"qwen2.5:7b":          30,
+		"gemma2:27b":          25,
+		"gemma2:9b":           20,
+	}
+
+	var bestModel OllamaModel
+	bestScore := -1
+
+	for _, model := range models {
+		score := 0
+
+		// Check for exact match in priorities
+		if priority, exists := modelPriorities[model.Name]; exists {
+			score = priority
+		} else {
+			// Fallback scoring based on model characteristics
+			score = calculateFallbackScore(model)
+		}
+
+		// Prefer larger models if scores are close (within 5 points)
+		if score > bestScore || (score == bestScore && model.Size > bestModel.Size) {
+			bestScore = score
+			bestModel = model
+		}
+	}
+
+	return bestModel
+}
+
+// calculateFallbackScore provides a score for models not in the priority list
+func calculateFallbackScore(model OllamaModel) int {
+	score := 30 // Base score for unknown models
+
+	// Boost score for coding-related keywords in name
+	name := strings.ToLower(model.Name)
+	if strings.Contains(name, "code") {
+		score += 30
+	}
+	if strings.Contains(name, "coder") {
+		score += 25
+	}
+	if strings.Contains(name, "star") {
+		score += 20
+	}
+	if strings.Contains(name, "wizard") {
+		score += 15
+	}
+	if strings.Contains(name, "magic") {
+		score += 15
+	}
+
+	// Boost score for larger models (more parameters)
+	if model.Details.ParameterSize != "" {
+		if strings.Contains(model.Details.ParameterSize, "13B") || strings.Contains(model.Details.ParameterSize, "13b") {
+			score += 20
+		} else if strings.Contains(model.Details.ParameterSize, "7B") || strings.Contains(model.Details.ParameterSize, "7b") {
+			score += 15
+		} else if strings.Contains(model.Details.ParameterSize, "34B") || strings.Contains(model.Details.ParameterSize, "34b") {
+			score += 25
+		} else if strings.Contains(model.Details.ParameterSize, "70B") || strings.Contains(model.Details.ParameterSize, "70b") {
+			score += 30
+		}
+	}
+
+	// Boost score for recent models (based on modification date)
+	// This is a simple heuristic - newer models are often better
+	daysSinceModified := time.Since(model.ModifiedAt).Hours() / 24
+	if daysSinceModified < 30 { // Modified within last 30 days
+		score += 10
+	} else if daysSinceModified < 90 { // Modified within last 90 days
+		score += 5
+	}
+
+	return score
 }
 
 // SetModel sets the current model for all Ollama requests
