@@ -49,7 +49,7 @@ ollama serve
 ### Install Silent Code
 
 ```bash
-go install github.com/muratbekj/silent-code@latest
+go install github.com/muratbekj/silent-code@main
 ```
 
 ## 🎯 Usage
