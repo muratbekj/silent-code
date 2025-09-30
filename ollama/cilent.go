@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"silent-code/agent"
-	"silent-code/history"
+	"github.com/muratbekj/silent-code/agent"
+	"github.com/muratbekj/silent-code/history"
 )
 
 type Request struct {

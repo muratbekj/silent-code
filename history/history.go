@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"silent-code/agent"
+	"github.com/muratbekj/silent-code/agent"
 )
 
 type HistoryManager struct {

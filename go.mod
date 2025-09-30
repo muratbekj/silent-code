@@ -1,4 +1,4 @@
-module silent-code
+module github.com/muratbekj/silent-code
 
 go 1.25.1
 

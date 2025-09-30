@@ -1,9 +1,10 @@
 package main
 
 import (
-	"silent-code/cmd"
-	"silent-code/mcp"
 	"time"
+
+	"github.com/muratbekj/silent-code/cmd"
+	"github.com/muratbekj/silent-code/mcp"
 )
 
 func main() {

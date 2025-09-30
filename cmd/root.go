@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"silent-code/history"
-	"silent-code/mcp"
-	"silent-code/ollama"
+	"github.com/muratbekj/silent-code/history"
+	"github.com/muratbekj/silent-code/mcp"
+	"github.com/muratbekj/silent-code/ollama"
 
 	"github.com/spf13/cobra"
 )

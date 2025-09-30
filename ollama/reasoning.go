@@ -2,7 +2,8 @@ package ollama
 
 import (
 	"fmt"
-	"silent-code/agent"
+
+	"github.com/muratbekj/silent-code/agent"
 )
 
 // StartReasoning starts a new reasoning session
